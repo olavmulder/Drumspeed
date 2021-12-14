@@ -23,7 +23,6 @@ def MysqlConnect(username, pwd,hostName, databaseName):
    
 def MysqlQueryReturn(query, connection):
     
-    
     cursor = connection.cursor()
     cursor.execute(query)
     result = cursor.fetchall()

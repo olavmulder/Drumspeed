@@ -2,7 +2,12 @@
 binaries/*
 TIMER/*
 GPIO/*
-zip.*
+zip/*
+C++/*
+.vscode/*
+#progrma files
+hello
+main
 # Prerequisites
 *.d
 #shell

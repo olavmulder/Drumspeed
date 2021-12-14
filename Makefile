@@ -23,7 +23,7 @@ main		:= $(libFolder)/main.o
 
 libName		:= $(libFolder)/connectBelt.a
 
-main: C++/main.cpp CURL/*.c SPI/*.c BACKUP/*.c LIST/linkedList.c
+main: main.cpp CURL/*.c SPI/*.c BACKUP/*.c LIST/linkedList.c
 	$(CC) $(C_FLAGS)  $^  -o $@ $(LIBS)
 
 #.PHONY: all
