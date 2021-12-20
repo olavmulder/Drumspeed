@@ -12,6 +12,7 @@ struct Node{
     char time[20];
     struct Node *next;
 };
+
 void InsertFirst(float *speed, float*rpm, float* amount, char* time);
 void InsertLast(float *speed, float*rpm, float* amount, char* time);
 float* DeleteFirst();/*returned data*/

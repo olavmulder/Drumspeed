@@ -23,24 +23,33 @@ def GetAmountNullValues(invalidValues):
         i+=1
     return amountNullValues
 
-def CalculateTimeError(id, second):
+def CalculateTimeError(id, minute, second):
     i = 0
     amountInvalidTimeFrame = 0
     amountOneSecOff = 0
     lastIndex = 0
+    
     for index in second:
+        '''
+        goed als:
+            time == 30 && minuut == 0 ( 22 && 52)
+            time == -30 && minuut == -1 (52 && 22)
+
+        '''
         time = index - lastIndex
-        
-        if (time != 30) and (time != -30) and i != 0:
-            amountInvalidTimeFrame += 1
-            if(time == -29 or time == -31 or time == 31 or time == 29):
-                amountOneSecOff += 1
-            else:
+        if(i > 0):
+            minuteValue = minute[i] - minute[i-1]
+            if (minute[i] == 0 and minute[i-1] == 59):
+                minuteValue = 1
+            if(not (time == 30 and minuteValue == 0) and not(time == -30 and minuteValue == 1)):
+
+                amountInvalidTimeFrame += 1
                 print( "id", id[i], ": ", index, "- ", lastIndex, " = ", time) 
+          
         lastIndex = index
         i = i + 1
     
-    return amountInvalidTimeFrame,amountOneSecOff
+    return amountInvalidTimeFrame
 def CalculateMeasurementError(connection):
     #get id's where rpm is 1 of more different from last id-> error = 0.1 %
     
@@ -60,8 +69,12 @@ def CalculateMeasurementError(connection):
             diff = rpm[x] - oldData
             if not(diff > -1 and diff < 1):
                 amountDiffError += 1
+                listRPMErrorId.append(id[x+1])
                 listRPMErrorId.append(id[x])
-            oldData = rpm[x]
+                listRPMErrorId.append(id[x-1])
+                x+=1
+            if(x != amountRecords):
+                oldData = rpm[x]
         sql_list = str(tuple([listRPMErrorId])).replace('],','')
         if len(listRPMErrorId) != 0:
             sql_list = str(sql_list).replace('[','')
@@ -114,7 +127,21 @@ def CompareDrumSpeedWithBeltSpeed(startTime, stopTime, connection, beltspeed):
     
     return amountDiffSpeedError, len(avgSpeed)
 
-        
+def CalculateMaxMinAvg(connection, queryMin, queryMax, queryAvg):
+    result = GetArray(queryMax, connection)
+    max =  [row[0] for row in result]
+    max = max[0]
+    result = GetArray(queryMin, connection)
+    min = [row[0] for row in result]
+    min = min[0]
+    result = GetArray(queryAvg, connection)
+    sum = 0
+    for x in result:
+        sum += x[0]
+    avg = sum/len(result)
+    return min,max,avg
+
+
 if __name__ == '__main__':   
     #make connection with db
     connection = mysqlFunctions.MysqlConnect('olav', 'Ammeraal123!', '127.0.0.1',"testTable")
@@ -137,17 +164,26 @@ if __name__ == '__main__':
     aboveLimit = [row[1] for row in data]
     amountaboveLimit = len(aboveLimit)
 
+    #min, max, gem values
+    queryMin = "SELECT MIN(RPM) FROM data"
+    queryMax = "SELECT MAX(RPM) FROM data"
+    queryAvg = "SELECT RPM FROM data"
+    result = CalculateMaxMinAvg(connection, queryMin, queryMax, queryAvg)
+    minValue = result[0]
+    maxValue = result[1]
+    avgValue = result[2]
+    
     #select data where measementtime isn't null
     query = 'SELECT id, measurementTime FROM data WHERE measurementTime IS NOT NULL'
     result = GetArray(query, connection)
 
     #get wrong measurement times
     seconde = [row[1].second for row in result]
+    minute =  [row[1].minute for row in result]
     id = [row[0] for row in result]
-    returnValues = CalculateTimeError(id, seconde)
-    amountInvalidTimeFrame = returnValues[0]
-    amountOneSecOff = returnValues[1]
-    
+    returnValues = CalculateTimeError(id, minute, seconde)
+    amountInvalidTimeFrame = returnValues
+        
     
 
     #calculate diff error between values
@@ -156,26 +192,29 @@ if __name__ == '__main__':
     #reference between speed belt & speed drum
     #get first and last measurement time
     
-    startDate = datetime.fromisoformat('2021-12-09 11:50:00')
-    stopDate = datetime.fromisoformat('2021-12-09 12:20:00')
+    #startDate = datetime.fromisoformat('2021-12-09 11:50:00')
+    #stopDate = datetime.fromisoformat('2021-12-09 12:20:00')
     #by hand, get all the measured beltspeed values form the dashboard
-    beltSpeed = InsertSpeedFromDashboard(startDate, stopDate)
-    returnData  = CompareDrumSpeedWithBeltSpeed(startDate, stopDate, connection, beltSpeed)
-    amountDiffSpeedError = returnData[0]
-    totalRowCompare = returnData[1]
+    #beltSpeed = InsertSpeedFromDashboard(startDate, stopDate)
+    #returnData  = CompareDrumSpeedWithBeltSpeed(startDate, stopDate, connection, beltSpeed)
+    #amountDiffSpeedError = returnData[0]
+    #totalRowCompare = returnData[1]
 
     '''
     done: amount record, null values, above limit, under null, difference error betwee values, timeframe errors, compare drumspeed with beltspeed
     '''
     print("\ngeneral data:\n")
     print("amount records: ",           amountRecords)
+
+    print("max:", maxValue, " min: ", minValue, " avg: ",avgValue)
+
     print("amount null values: ",       amountNullValues)
     print("amount above limit(1200): ", amountaboveLimit)
     print("amount under null: ",        amountUnderNull)    
 
     print("amount diff error:",         amountDiffError)
-    print("amount diff Speed error:",   amountDiffSpeedError)
-    print("amount invalid time frame: ", amountInvalidTimeFrame, "with ",amountOneSecOff, "one sec off")
+    #print("amount diff Speed error:",   amountDiffSpeedError)
+    print("amount invalid time frame: ", amountInvalidTimeFrame)
     '''
     percentage calculation
     '''
@@ -188,7 +227,7 @@ if __name__ == '__main__':
     percentage = float((amountDiffError/amountRecords)*100)
     print("Difference error in percentage:", percentage)
  
-    percentage = float((amountDiffSpeedError/totalRowCompare)*100)
-    print("Difference error between speed of belt & drum in percentage:", percentage)
-    
+    #percentage = float((amountDiffSpeedError/totalRowCompare)*100)
+    #print("Difference error between speed of belt & drum in percentage:", percentage)
+
     exit(0)

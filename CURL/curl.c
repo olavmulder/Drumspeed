@@ -44,7 +44,7 @@ int SendDataToDatabase(float *_speed, float*_rpm, char *ipAddr, float* _amountTo
     free(amountToRead);
    
     lenData = (size_t)snprintf(NULL,0, "%s", ipAddr);
-    char ipAddress[lenData];
+    char *ipAddress = (char*)malloc(lenData+1);
     for(i=0;i<(int)lenData+1;i++){
         ipAddress[i] = '\0';
     }
@@ -66,6 +66,7 @@ int SendDataToDatabase(float *_speed, float*_rpm, char *ipAddr, float* _amountTo
         curl_easy_cleanup(curl);   
     }
     free(finleString);
+    free(ipAddress);
     curl_global_cleanup();
     return 0;
 }

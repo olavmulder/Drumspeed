@@ -12,10 +12,10 @@
 #define MAX_TIMER_VALUE 65536.0F
 #define PI 3.14159265359f
 #define BACKUP
-
-float CalculateAvgTimeShort(uint16_t* counter, uint16_t* timer, uint8_t amount);
+#define CLOCKS_PER_SEC_OWN 24000000l
+float CalculateAvgTimePerDetection(uint16_t* counter, uint16_t* timer, uint8_t amount);
 float CalculateAvg(float* array, uint8_t amount);
-void CalculateSpeed(float *time, float* radius);
+void CalculateSpeed(float* speed, float *rpm, const float* circFerence);
 float CalculateRPM(float time);
 int mainThread(int argc, char **argv);
 void backupThread(float*, float*, float*, char*);
@@ -23,24 +23,35 @@ void backupThread(float*, float*, float*, char*);
 const float timer1time = (MAX_TIMER_VALUE/TIMER1);
 const float timer1MaxValue = MAX_TIMER_VALUE;
 
+volatile bool runBackupSystemNow = false;
+/*variables for backup thread*/
+float rpm, speed, amount;
+char *ipAddr;
+
 int main(int argc, char **argv){
     std::thread main(mainThread, argc, argv);
-    main.join();
+    //std::thread backup(backupThread,&rpm, &speed, &amount, &ipAddr[0]);
+    while (1)
+    {
+        /* code */
+    }
+    
     
     return 0;
 }
 int mainThread(int argc, char **argv){
-    openlog("DrumSpeedSensor5.0 with parrallel thread", LOG_PERROR, LOG_SYSLOG);
+    openlog("Drumspeedd:", LOG_PERROR, LOG_SYSLOG);
     if(argc< 4){
         syslog(LOG_NOTICE, "ipv4 addr+server location, speed & diameter is needed");
         return 1;
     }
     /*spi values*/
 
-    uint32_t speed = (uint32_t)atoi(argv[2]);
+    uint32_t speedSPI = (uint32_t)atoi(argv[2]);
 
-    char *ipAddr = argv[1];
-    float radius = (float)((float)atof(argv[3])/2.0f);
+    ipAddr = argv[1];
+    float radius = (float)((float)atof(argv[3]));
+    const float circFerence = (float)(radius*PI);
     uint8_t mode = 0;
     uint8_t  bits = 8;
     uint8_t askBytes = BEGIN_SEND;
@@ -51,8 +62,9 @@ int mainThread(int argc, char **argv){
     uint8_t **dataArray;
     spi_t spi;
     syslog(LOG_NOTICE, "IPV4: %s, radius: %.4f", ipAddr, radius);
-    spi_init(&spi, name, mode, bits, speed);
+    spi_init(&spi, name, mode, bits, speedSPI);
 
+    
     /*general values for for-loops etc.*/
     unsigned int i,j = 0;
     uint8_t k;
@@ -62,31 +74,41 @@ int mainThread(int argc, char **argv){
     uint8_t timeDatabaseIndex = 0;/*index for holding location in array*/
     int amountToReadBuffer;
 
+
+   
+
     while(1){
-        clock_t begin = clock();
+        //clock_t begin = clock();
         for(k=0;k<6;k++){
             /*SPITransfer();*/
-            clock_t beginMain = clock();
+            time_t beginMain = time(0);
+            
             spi_write(&spi, &askBytes, sizeof(askBytes));
-            usleep(1000);
+            //usleep(1000);
             
             spi_read(&spi,&amountToRead, sizeof(amountToRead));
             
             dataArray= (uint8_t**)malloc(amountToRead * sizeof(uint8_t*));
+            if(!dataArray)printf("allocate error dataArray begin\n");
+
             for(i=0;i<amountToRead;i++){
                 dataArray[i] = (uint8_t*)malloc(arrayDepth * sizeof(uint8_t));
+                if(!dataArray[i])printf("allocate error dataArray[%d] begin\n", i);
+
             }
             
             uint16_t *counter;
             counter = (uint16_t*)malloc(amountToRead * sizeof(uint16_t));
-
+            if(!counter)printf( "allocate error counter\n");
             uint16_t *timer;
             timer = (uint16_t*)malloc(amountToRead * sizeof(uint16_t));
+            if(!timer)printf("allocate error timer\n");
 
             for(i=0;i<amountToRead;i++){
                 for(j=0;j<arrayDepth;j++){
                     spi_read(&spi, &data, sizeof(data));
                     *(*(dataArray+i)+j) = data;  
+                    //printf("%d\n", *(*(dataArray+i)+j));
                 }
             } 
             spi_write(&spi, &end, sizeof(end));
@@ -96,8 +118,8 @@ int mainThread(int argc, char **argv){
                 *(timer+i) =   (uint16_t)( ((uint16_t) *(*(dataArray+i)+3) << 8) | ( *(*(dataArray+i) +2) << 0));
                 *(counter+i) = (uint16_t)( ((uint16_t) *(*(dataArray+i)+1) << 8) | ( *(*(dataArray+i) +0) << 0));   
             }
-            /*avg time used for last 5 sec*/
-            timeToUseInDatabase[timeDatabaseIndex] = CalculateAvgTimeShort(counter, timer,amountToRead); 
+            /*avg time used for every detectioin of the last 5 sec*/
+            timeToUseInDatabase[timeDatabaseIndex] = CalculateAvgTimePerDetection(counter, timer,amountToRead); 
             rpmToUseInDatabase[timeDatabaseIndex] = CalculateRPM(timeToUseInDatabase[timeDatabaseIndex]);
             timeDatabaseIndex ++;
             /*free data array*/
@@ -107,36 +129,34 @@ int mainThread(int argc, char **argv){
             free(timer);
             free(counter);
             amountToReadBuffer += amountToRead;
-            clock_t endMain;
-            double timeSpent;
-            do{
-                endMain = clock();
-                timeSpent = (double)(endMain-beginMain) / CLOCKS_PER_SEC;
-            }while(timeSpent < 4.95000);
+            time_t endMain;
+            double timeSpent = 0;
+            int amountInLoop = 0;
+            while(timeSpent < 5){
+                endMain = time(0);
+                timeSpent = (double)endMain-(double)beginMain;
+                amountInLoop++;
+            }
+            printf("amountInLoop %d: %d\n", k, amountInLoop);
+            printf("time spend %.8f\n", timeSpent);
         }
+        
         /*after 6 times send data to database*/  
        
         /*avg time of all data*/
-        float speed = CalculateAvg(timeToUseInDatabase, timeDatabaseIndex);
-        float rpm = CalculateAvg(rpmToUseInDatabase,timeDatabaseIndex);
-        float amount;
+        ///float time = CalculateAvg(timeToUseInDatabase, timeDatabaseIndex);
+        rpm = CalculateAvg(rpmToUseInDatabase,timeDatabaseIndex);
+       
         if(amountToReadBuffer == 0)amount = 0.0f;
         else amount = (float)amountToReadBuffer;
         amountToReadBuffer = 0;
-        syslog(LOG_INFO, "send to database, speed %f, rpm %f, amount: %f", speed, rpm, amount);
-
-        CalculateSpeed(&speed, &radius);
         
+        CalculateSpeed(&speed, &rpm, &circFerence);
+ 
         std::thread backup(backupThread, &speed, &rpm, &amount, &ipAddr[0]);
         backup.detach();
 
         timeDatabaseIndex = 0;
-        double time_spent;
-        do{
-            clock_t end = clock();
-            time_spent = (double)(end-begin) / CLOCKS_PER_SEC;
-        }while(time_spent < 30.0000);
-        //printf("totaal time is %f\n", time_spent);
     }
     spi_free(&spi);
     free(ipAddr);
@@ -144,12 +164,18 @@ int mainThread(int argc, char **argv){
     
 }
 void backupThread(float* speed, float* rpm, float* amount, char* addr){
+    syslog(LOG_INFO, "send to database, speed %f, rpm %f, amount: %f", *speed, *rpm, *amount);
+
     unsigned int i;
     char* timeString;
     //get time
     time_t t = time(NULL);
     struct tm  *tm = localtime(&t);
     timeString = (char*)malloc(sizeof(char)*20);
+    if(!timeString){
+        printf("allocate error timeString\n");
+        
+    }
     snprintf(timeString, 20, "%04d-%02d-%02d %02d:%02d:%02d", tm->tm_year+1900,tm->tm_mon+1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
     
     float **array;
@@ -158,48 +184,58 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
 
     //get siz
     unsigned int sizeBackupOrig;
-    unsigned int sizeBackupList = sizeBackupOrig = GetSizeList();
+    unsigned int sizeBackupList = GetSizeList();
+    printf("size from GetSizeList at the beginning %d\n", sizeBackupList);
+    sizeBackupOrig = sizeBackupList;
     //if there is data in backup list
     if(sizeBackupList > 0){
-            //connect & ping
-            if(!system("/bin/sh networkscript.sh")){//if succeeds send all!
-                //make array to store all data
-                array = (float**)malloc(sizeBackupList * sizeof(float*));
-                for(i=0;i<sizeBackupList;i++){
-                    array[i] = (float*)malloc(3 * sizeof(float)); 
+        //connect & ping
+        if(!system("/bin/sh /root/networkscript.sh")){//if succeeds send all!
+            //make array to store all data
+            array = (float**)malloc(sizeBackupList * sizeof(float*));
+            if(!array){
+                printf("allocate error array\n");
+            }
+            for(i=0;i<sizeBackupList;i++){
+                array[i] = (float*)malloc(3 * sizeof(float)); 
+                if(!array[i]){
+                    printf("allocate error array[%d]\n", i);
                 }
-                timeArr = (char*)malloc(sizeBackupList * sizeof(timeArray));
-                
-                //put all data in sizeBackupList
-                BackupGetAllData(array, timeArr, sizeBackupList);
-                //send all data in array to Database
-                unsigned int b;
-                for(b=0;b<sizeBackupList;b++){
-                    //strcpy(timeArray, (timeArr+i));
-                    for(uint8_t j = 0;j<20;j++){
-                        timeArray[j] = *((timeArr+j)+b*20);
-                    }       
-                    timeArray[19] = '\0';
-                    if(SendDataToDatabase((*(array+b)+0), (*(array+b)+1), addr, (*(array+b)+2), &timeArray[0], 1)){//not sended
-                        BackupData((*(array+b)+0), (*(array+b)+1), (*(array+b)+2), &timeArray[0]);
-                    }
+            }
+            timeArr = (char*)malloc(sizeBackupList * sizeof(timeArray));
+            if(!timeArr){
+                printf("allocate error timeArr\n");
+            }
+            //put all data in sizeBackupList
+            BackupGetAllData(array, timeArr, sizeBackupList);
+            //send all data in array to Database
+            unsigned int b;
+            for(b=0;b<sizeBackupList;b++){
+                //strcpy(timeArray, (timeArr+i));
+                for(uint8_t j = 0;j<20;j++){
+                    timeArray[j] = *((timeArr+j)+b*20);
+                }       
+                timeArray[19] = '\0';
+                if(SendDataToDatabase((*(array+b)+0), (*(array+b)+1), addr, (*(array+b)+2), &timeArray[0], 1)){//not sended
+                    BackupData((*(array+b)+0), (*(array+b)+1), (*(array+b)+2), &timeArray[0]);
                 }
-                //send last measured data
-                if(SendDataToDatabase(speed,rpm,addr,amount,timeString, 0)){//not sended
-                    unsigned int sizeBackupList = BackupData(speed, rpm, amount, timeString);
-                    syslog(LOG_NOTICE, "Failed to send data, size backup list is %d\n", sizeBackupList);
-                }
-                for(i=0;i<sizeBackupOrig;i++){
-                    free(array[i]);
-                }
-                free(timeArr);
-                
-
-            }else{//there is data but still not a connection, backup the data
+            }
+            //send last measured data
+            if(SendDataToDatabase(speed,rpm,addr,amount,timeString, 0)){//not sended
                 unsigned int sizeBackupList = BackupData(speed, rpm, amount, timeString);
                 syslog(LOG_NOTICE, "Failed to send data, size backup list is %d\n", sizeBackupList);
-
             }
+            for(i=0;i<sizeBackupOrig;i++){
+                free(array[i]);
+            }
+            free(timeArr);
+            
+
+        }else{//there is data but still not a connection, backup the data
+            unsigned int sizeBackupList = BackupData(speed, rpm, amount, timeString);
+            syslog(LOG_NOTICE, "Failed to send data, size backup list is %d\n", sizeBackupList);
+
+        }
     }else{//no data in backup list
         if(SendDataToDatabase(speed,rpm, addr, amount, timeString, 0)){//send data to database,
             //failed so backup the data
@@ -208,6 +244,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
         }
     }
     free(timeString);
+    syslog(LOG_INFO,"end backup thread!\n");
 }
 float CalculateAvg(float* array, uint8_t amount){
     /*caluculate avg time, if value is inf, than trow it away*/
@@ -229,7 +266,7 @@ float CalculateAvg(float* array, uint8_t amount){
     return total;   
 }
 
-float CalculateAvgTimeShort(uint16_t *counter, uint16_t* timer, uint8_t amount){
+float CalculateAvgTimePerDetection(uint16_t *counter, uint16_t* timer, uint8_t amount){
     float total=0;
     uint8_t i=0;
     uint8_t amountBuffer = amount;
@@ -248,12 +285,14 @@ float CalculateAvgTimeShort(uint16_t *counter, uint16_t* timer, uint8_t amount){
         return total;
     }
 }
-void CalculateSpeed(float* speed, float* radius){
-    if(*speed == 0){
-        return;
+void CalculateSpeed(float* speed, float *rpm, const float* circFerence){
+    if(*rpm == 0){
+        *speed = 0 ;
     }
-    float distance = (float)2*(*radius)*PI;
-    *speed = distance/(*speed);
+    //distance = meter per omwenteling
+    //time = avg time per omweteling
+    // rpm*distance = speed in meter/minuut
+    *speed = (*circFerence)*(*rpm);
 }
 
 float CalculateRPM(float time){

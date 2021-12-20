@@ -1,52 +1,65 @@
 #include "linkedList.h"
-static struct Node *head =NULL, *last =NULL;
 static float returnArray[3];
 static char returntimeArray[20];
+
+static struct Node *beginHead;
+static struct Node *head;
+static struct Node *tail;
+static size_t size;
+/*
+ *list = calloc 24*60*2 node struct; 
+ * head = list
+ * last ++
+ * 
+ */
+
 void InsertFirst(float *speed, float *rpm, float *amount, char* time){
-    struct Node *link = (struct Node*)malloc(sizeof(struct Node));
-    link->speed = *speed;
-    link->rpm = *rpm;
-    link->amount = *amount;
-    strcpy(link->time, time);
-    if(listEmpty()){
-        last = (struct Node*)malloc(sizeof(struct Node));
-        last  = link;
-        last->next = NULL;
-    }
-    link->next = head;
-    head = link;
+    head = (struct Node*)malloc(24*60*2*sizeof(struct Node));
+    if(!head)printf("malloc head\n"); 
+    beginHead = head;
+    head->speed = *speed;
+    head->rpm = *rpm;
+    head->amount = *amount;
+    strcpy(head->time, time);
+    head->next = NULL;
+    tail = head;
+    size = 1;
 }
 void InsertLast(float*speed, float*rpm, float*amount, char* time){
-    struct Node *link = (struct Node*)malloc(sizeof(struct Node));
-    link->speed = *speed;
-    link->rpm = *rpm;
-    link->amount = *amount;
-    strcpy(link->time, time);
-    link->next = NULL;
-
-    last->next = link;
-    last = link;
+    tail->next = tail+1;
+    tail = tail+1;
+    size +=1;
+    if(size == 24*60*2-1){
+        printf("size to big??\n");
+        exit(1);
+    } 
+    tail->speed = *speed;
+    tail->rpm = *rpm;
+    tail->amount = *amount;
+    strcpy(tail->time, time);
+    tail->next = NULL;
 }
 unsigned int GetSizeList(){
-    struct Node* temp = head;
-    unsigned int i=0;
-    while(temp != NULL){
-        i++;
-        temp = temp->next;
-    }
-    return i;
+    return size;
 }
 char* GetTime(){
     strcpy(returntimeArray,&head->time[0]);
     return &returntimeArray[0];
 }
 float* DeleteFirst(){
-    struct Node* temp  = head;
+    
     returnArray[0] =  head->speed;
     returnArray[1] =  head->rpm;
     returnArray[2] =  head->amount;
-    head = head->next;
-    free(temp);
+    if(head == NULL){
+        head = beginHead;
+    }else{
+        head = head->next;
+    }
+    size--;
+    if(size == 0){
+        free(head);
+    }
     return &returnArray[0];
 }
 void PrintList(){
