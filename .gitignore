@@ -68,5 +68,5 @@ Mkfile.old
 dkms.conf
 
 #overig
-.c.orig
+*.c.orig
 curlTest
