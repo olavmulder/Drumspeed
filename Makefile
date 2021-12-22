@@ -1,9 +1,6 @@
-#/home/olav/buildroot-2021.08.2/output/host/bin/arm-buildroot-linux-uclibcgnueabihf-g++ -o 
-#main C++/main.cpp BACKUP/backup.c CURL/curl.c LIST/linkedList.c SPI/spi.c -lcurl
 
 PROJECT_NAME:= main
 CC := /home/olav/buildroot-2021.08.2/output/host/bin/arm-buildroot-linux-uclibcgnueabihf-g++
-C_FLAGS := -Wconversion -Wextra -Wall -Werror -pedantic
 INCLUDE := -I/home/olav/buildroot-2021.08.2/output/host/arm-buildroot-linux-uclibcgnueabihf/include/c++/10.3.0/ -L/home/olav/buildroot-2021.08.2/output/host/arm-buildroot-linux-uclibcgnueabihf/lib/
 LIBS := -lcurl 
  
@@ -21,8 +18,6 @@ main		:= $(libFolder)/main.o
 
 libName		:= $(libFolder)/connectBelt.a
 
-#main: main.cpp CURL/*.c SPI/*.c BACKUP/*.c LIST/linkedList.c
-#	$(CC) $(C_FLAGS)  $^  -o $@ $(LIBS)
 .PHONY: lib
 lib: $(libName)
 .PHONY: build
@@ -33,6 +28,7 @@ $(PROJECT_NAME): $(main) $(libName)
 
 $(libName): $(spi) $(curl) $(backup) $(list)
 	ar rcs $@ $^
+
 
 $(main): main.cpp
 	$(CC) $(C_FLAGS) -c  $< -o $@ $(INCLUDE) $(LIBS) 

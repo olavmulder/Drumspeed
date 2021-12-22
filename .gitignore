@@ -5,6 +5,8 @@ GPIO/*
 zip/*
 C++/*
 uploadFolder/*
+LIST/main*
+LIST/Makefile
 .vscode/*
 #progrma files
 hello
