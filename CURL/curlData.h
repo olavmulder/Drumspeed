@@ -14,7 +14,6 @@ struct string{
 int SendDataToDatabase(float* _speed, float* _rpm, char * ipAddr, \
  float* _amountToRead, char* _time, char backup);
 
-//static const char standaardInfoPart0[] = "?api_key=PUWI7VQCMC8BOSIT";
 static const char standaardInfoPart1[] = "&field1=";
 static const char standaardInfoPart2[] = "&field2=";
 static const char standaardInfoPart3[] = "&field3=";
