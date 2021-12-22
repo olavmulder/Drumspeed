@@ -18,12 +18,12 @@ int SendDataToDatabase(float *_speed, float*_rpm, char *ipAddr, float* _amountTo
     //get lenght whole string
     size_t length = standLenght +  strlen(ipAddr) + strlen(speed) \
         + strlen(rpm) + strlen(amountToRead)+2;
-    //printf("backup: %c\n", backup);
+    
     char *finleString;
     finleString = (char*)malloc(length);
     sprintf(finleString, "%s%s%.4f%s%.4f%s%.4f%s%s%c", ipAddr, standaardInfoPart1, *_speed, standaardInfoPart2, *_rpm, \
         standaardInfoPart3,*_amountToRead,standaardInfoPart4, standaardInfoPart5, backup);
-    //printf("%s\n", finleString);
+    
     time = time;
    
 
