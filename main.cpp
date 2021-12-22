@@ -142,7 +142,6 @@ int mainThread(int argc, char **argv){
         /*after 6 times send data to database*/  
        
         /*avg time of all data*/
-        ///float time = CalculateAvg(timeToUseInDatabase, timeDatabaseIndex);
         rpm = CalculateAvg(rpmToUseInDatabase,timeDatabaseIndex);
        
         if(amountToReadBuffer == 0)amount = 0.0f;
@@ -163,7 +162,7 @@ int mainThread(int argc, char **argv){
                 
             }
             snprintf(timeString, 20, "%04d-%02d-%02d %02d:%02d:%02d", tm->tm_year+1900,tm->tm_mon+1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
-    
+
             unsigned int sizeBackupList = BackupData(&speed, &rpm, &amount, timeString);
             syslog(LOG_NOTICE, "Failed to send new data, size backup list is %d\n", sizeBackupList);
         }else{
@@ -198,7 +197,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
     char timeArray[20];
     char *timeArr;
 
-    //get siz
+    //get size
     unsigned int sizeBackupOrig;
     unsigned int sizeBackupList = GetSizeList();
     
@@ -227,7 +226,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
             //send all data in array to Database
             unsigned int b;
             for(b=0;b<sizeBackupList;b++){
-                //strcpy(timeArray, (timeArr+i));
+               
                 for(uint8_t j = 0;j<20;j++){
                     timeArray[j] = *((timeArr+j)+b*20);
                 }       
@@ -306,9 +305,7 @@ void CalculateSpeed(float* speed, float *rpm, const float* circFerence){
     if(*rpm == 0){
         *speed = 0 ;
     }
-    //distance = meter per omwenteling
-    //time = avg time per omweteling
-    // rpm*distance = speed in meter/minuut
+
     *speed = (*circFerence)*(*rpm);
 }
 
