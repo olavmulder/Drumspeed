@@ -23,7 +23,7 @@ void backupThread(float*, float*, float*, char*);
 const float timer1time = (MAX_TIMER_VALUE/TIMER1);
 const float timer1MaxValue = MAX_TIMER_VALUE;
 
-volatile bool runBackupSystemNow = false;
+volatile bool backupIsRunning = false;
 /*variables for backup thread*/
 float rpm, speed, amount;
 char *ipAddr;
@@ -84,7 +84,6 @@ int mainThread(int argc, char **argv){
             time_t beginMain = time(0);
             
             spi_write(&spi, &askBytes, sizeof(askBytes));
-            //usleep(1000);
             
             spi_read(&spi,&amountToRead, sizeof(amountToRead));
             
@@ -108,7 +107,7 @@ int mainThread(int argc, char **argv){
                 for(j=0;j<arrayDepth;j++){
                     spi_read(&spi, &data, sizeof(data));
                     *(*(dataArray+i)+j) = data;  
-                    //printf("%d\n", *(*(dataArray+i)+j));
+                    
                 }
             } 
             spi_write(&spi, &end, sizeof(end));
@@ -128,6 +127,7 @@ int mainThread(int argc, char **argv){
             } 
             free(timer);
             free(counter);
+
             amountToReadBuffer += amountToRead;
             time_t endMain;
             double timeSpent = 0;
@@ -137,8 +137,6 @@ int mainThread(int argc, char **argv){
                 timeSpent = (double)endMain-(double)beginMain;
                 amountInLoop++;
             }
-            printf("amountInLoop %d: %d\n", k, amountInLoop);
-            printf("time spend %.8f\n", timeSpent);
         }
         
         /*after 6 times send data to database*/  
@@ -152,9 +150,26 @@ int mainThread(int argc, char **argv){
         amountToReadBuffer = 0;
         
         CalculateSpeed(&speed, &rpm, &circFerence);
- 
-        std::thread backup(backupThread, &speed, &rpm, &amount, &ipAddr[0]);
-        backup.detach();
+        
+        if(backupIsRunning){
+            //backup is still running, put new data in list
+            char* timeString;
+            //get time
+            time_t t = time(NULL);
+            struct tm  *tm = localtime(&t);
+            timeString = (char*)malloc(sizeof(char)*20);
+            if(!timeString){
+                printf("allocate error timeString\n");
+                
+            }
+            snprintf(timeString, 20, "%04d-%02d-%02d %02d:%02d:%02d", tm->tm_year+1900,tm->tm_mon+1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
+    
+            unsigned int sizeBackupList = BackupData(&speed, &rpm, &amount, timeString);
+            syslog(LOG_NOTICE, "Failed to send new data, size backup list is %d\n", sizeBackupList);
+        }else{
+            std::thread backup(backupThread, &speed, &rpm, &amount, &ipAddr[0]);
+            backup.detach();
+        }
 
         timeDatabaseIndex = 0;
     }
@@ -164,6 +179,7 @@ int mainThread(int argc, char **argv){
     
 }
 void backupThread(float* speed, float* rpm, float* amount, char* addr){
+    backupIsRunning = true;
     syslog(LOG_INFO, "send to database, speed %f, rpm %f, amount: %f", *speed, *rpm, *amount);
 
     unsigned int i;
@@ -185,7 +201,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
     //get siz
     unsigned int sizeBackupOrig;
     unsigned int sizeBackupList = GetSizeList();
-    printf("size from GetSizeList at the beginning %d\n", sizeBackupList);
+    
     sizeBackupOrig = sizeBackupList;
     //if there is data in backup list
     if(sizeBackupList > 0){
@@ -216,12 +232,12 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
                     timeArray[j] = *((timeArr+j)+b*20);
                 }       
                 timeArray[19] = '\0';
-                if(SendDataToDatabase((*(array+b)+0), (*(array+b)+1), addr, (*(array+b)+2), &timeArray[0], 1)){//not sended
+                if(SendDataToDatabase((*(array+b)+0), (*(array+b)+1), addr, (*(array+b)+2), &timeArray[0], '1')){//not sended
                     BackupData((*(array+b)+0), (*(array+b)+1), (*(array+b)+2), &timeArray[0]);
                 }
             }
             //send last measured data
-            if(SendDataToDatabase(speed,rpm,addr,amount,timeString, 0)){//not sended
+            if(SendDataToDatabase(speed,rpm,addr,amount,timeString, '0')){//not sended
                 unsigned int sizeBackupList = BackupData(speed, rpm, amount, timeString);
                 syslog(LOG_NOTICE, "Failed to send data, size backup list is %d\n", sizeBackupList);
             }
@@ -237,7 +253,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
 
         }
     }else{//no data in backup list
-        if(SendDataToDatabase(speed,rpm, addr, amount, timeString, 0)){//send data to database,
+        if(SendDataToDatabase(speed,rpm, addr, amount, timeString, '0')){//send data to database,
             //failed so backup the data
             unsigned int sizeBackupList = BackupData(speed, rpm, amount, timeString);
             syslog(LOG_NOTICE, "Failed to send data, size backup list is %d\n", sizeBackupList);
@@ -245,6 +261,7 @@ void backupThread(float* speed, float* rpm, float* amount, char* addr){
     }
     free(timeString);
     syslog(LOG_INFO,"end backup thread!\n");
+    backupIsRunning = false;
 }
 float CalculateAvg(float* array, uint8_t amount){
     /*caluculate avg time, if value is inf, than trow it away*/
