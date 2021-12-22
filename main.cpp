@@ -30,7 +30,6 @@ char *ipAddr;
 
 int main(int argc, char **argv){
     std::thread main(mainThread, argc, argv);
-    //std::thread backup(backupThread,&rpm, &speed, &amount, &ipAddr[0]);
     while (1)
     {
         /* code */
